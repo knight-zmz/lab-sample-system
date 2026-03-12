@@ -917,3 +917,110 @@ END $$
 DELIMITER ;
 
 
+-- ============================================================================
+-- 8. 初始化测试数据
+-- ----------------------------------------------------------------------------
+-- 说明：
+-- 1. 测试数据不是为了“凑内容”，而是为了让视图、过程、函数有可观察效果。
+-- 2. 这里特意使用存储过程来登记样本，从而体现“关键业务通过统一入口执行”。
+-- ============================================================================
+
+-- 8.1 用户
+INSERT INTO users (username, real_name, role) VALUES
+('admin',    '系统管理员', '管理员'),
+('zhangsan', '张三',       '实验员'),
+('lisi',     '李四',       '实验员'),
+('visitor1', '王五',       '访客');
+
+-- 8.2 样本类型
+INSERT INTO sample_types (type_name, description) VALUES
+('血液样本', '来源于实验对象的血液样本'),
+('组织样本', '来源于心脏、肝脏等组织'),
+('细胞样本', '培养细胞或细胞提取物');
+
+-- 8.3 存储位置
+INSERT INTO storage_locations (location_name, description) VALUES
+('冰箱A-1层',   '4℃冰箱第一层'),
+('-80冰柜A-2层', '-80℃冰柜第二层'),
+('液氮罐1号',    '液氮长期保存区域');
+
+-- 8.4 科研项目
+INSERT INTO projects (project_name, principal_investigator, start_date, end_date, description) VALUES
+('鹿心多肽活性研究', '王老师', '2026-03-01', NULL, '用于研究鹿心来源样本及相关活性机制'),
+('细胞应激实验项目', '李老师', '2026-02-20', NULL, '关注细胞提取物与应激响应');
+
+-- 8.5 通过存储过程登记样本
+CALL sp_register_sample('鹿心血清样本A', 1, 1, 2, '2026-03-10', 1, '初始登记');
+CALL sp_register_sample('鹿心组织样本B', 2, 1, 2, '2026-03-09', 2, '初始登记');
+CALL sp_register_sample('细胞提取物C',   3, 2, 1, '2026-03-08', 3, '初始登记');
+
+-- 8.6 演示部分业务动作
+-- 先借出 1 号样本，再移位 2 号样本，最后废弃 3 号样本。
+CALL sp_borrow_sample(1, 2, DATE_ADD(NOW(), INTERVAL 3 DAY), '蛋白提取实验', '教学演示：借用样本');
+CALL sp_move_sample(2, 3, 1, '教学演示：转移到液氮罐保存');
+CALL sp_dispose_sample(3, 1, '教学演示：样本质量不满足保存要求，执行废弃');
+
+
+-- ============================================================================
+-- 9. 示例查询（可直接执行观察结果）
+-- ----------------------------------------------------------------------------
+-- 这些查询不是系统定义的一部分，而是帮助你学习和演示：
+-- 1. 看综合视图
+-- 2. 看当前借用
+-- 3. 看历史流水
+-- 4. 看统计函数
+-- 5. 看索引在 EXPLAIN 中的使用
+-- ============================================================================
+
+-- 查看样本详情
+SELECT * FROM v_sample_detail ORDER BY sample_id;
+
+-- 查看当前借用样本
+SELECT * FROM v_current_borrowed_samples ORDER BY borrow_time DESC;
+
+-- 查看样本类型统计
+SELECT * FROM v_sample_statistics_by_type ORDER BY type_id;
+
+-- 查看项目统计
+SELECT * FROM v_project_sample_statistics ORDER BY project_id;
+
+-- 查看历史流水
+SELECT
+    transaction_id,
+    sample_id,
+    user_id,
+    action_type,
+    from_location_id,
+    to_location_id,
+    action_time,
+    remark
+FROM sample_transactions
+ORDER BY transaction_id;
+
+-- 调用函数：某类型样本数量
+SELECT fn_sample_count_by_type(1) AS blood_sample_count;
+
+-- 调用函数：某用户当前借用中的样本数量
+SELECT fn_active_borrow_count_by_user(2) AS active_borrow_count_of_user_2;
+
+-- 查看索引优化效果（示例）
+EXPLAIN SELECT * FROM samples WHERE type_id = 1;
+EXPLAIN SELECT * FROM borrow_records WHERE user_id = 2 AND status IN ('borrowed', 'overdue');
+
+
+-- ============================================================================
+-- 10. 设计总结（写在 SQL 里的学习性备注）
+-- ----------------------------------------------------------------------------
+-- 这份脚本最重要的不是“功能多”，而是“语义不打架”：
+--
+-- 1. samples      -> 只管当前状态
+-- 2. borrow_records -> 只管借用单据
+-- 3. sample_transactions -> 只管历史流水
+--
+-- 4. 借用、归还、移位、废弃都通过存储过程统一执行
+-- 5. 触发器不再参与业务流水写入，避免重复记账
+-- 6. 视图和函数分别承担查询抽象与单值统计的角色
+--
+-- 这就是这份课程设计最核心的数据库思想：
+-- “同一个业务动作，最好只有一个主入口；不同数据库机制应各守边界。”
+-- ============================================================================

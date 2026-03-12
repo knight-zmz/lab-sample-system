@@ -1,7 +1,8 @@
 #数据库工具模块
 import os
-import pymysql
+
 import pandas as pd
+import pymysql
 import streamlit as st
 
 
@@ -37,6 +38,14 @@ def get_connection():
         st.stop()
 
 
+def _normalize_params(params=None):
+    if params is None:
+        return ()
+    if isinstance(params, (list, tuple)):
+        return tuple(params)
+    return (params,)
+
+
 def query_df(sql, params=None):
     conn = get_connection()
     try:
@@ -46,18 +55,77 @@ def query_df(sql, params=None):
         conn.close()
 
 
+def fetch_all(sql, params=None):
+    conn = get_connection()
+    cursor = None
+    try:
+        cursor = conn.cursor(cursor=pymysql.cursors.DictCursor)
+        cursor.execute(sql, _normalize_params(params))
+        return cursor.fetchall()
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def fetch_one(sql, params=None):
+    rows = fetch_all(sql, params)
+    return rows[0] if rows else None
+
+
+def fetch_scalar(sql, params=None, default=None):
+    row = fetch_one(sql, params)
+    if not row:
+        return default
+    return next(iter(row.values()))
+
+
 def execute(sql, params=None):
     conn = get_connection()
     cursor = None
     try:
         cursor = conn.cursor()
-        cursor.execute(sql, params)
+        cursor.execute(sql, _normalize_params(params))
         conn.commit()
         return True
     except Exception as e:
         conn.rollback()
         st.error(str(e))
         return False
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def execute_action(sql, params=None):
+    conn = get_connection()
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.execute(sql, _normalize_params(params))
+        conn.commit()
+        return True, None
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
+    finally:
+        if cursor is not None:
+            cursor.close()
+        conn.close()
+
+
+def call_procedure(name, args=None):
+    conn = get_connection()
+    cursor = None
+    try:
+        cursor = conn.cursor()
+        cursor.callproc(name, _normalize_params(args))
+        conn.commit()
+        return True, None
+    except Exception as e:
+        conn.rollback()
+        return False, str(e)
     finally:
         if cursor is not None:
             cursor.close()
