@@ -1,9 +1,41 @@
 #数据库工具模块
 import os
+import time
 
 import pandas as pd
 import pymysql
 import streamlit as st
+
+
+def _translate_db_error(error: Exception) -> str:
+    """
+    把 MySQL 异常翻译成用户友好的提示信息。
+    """
+    error_str = str(error).lower()
+    
+    if "1062" in error_str or "unique" in error_str or "duplicate" in error_str:
+        return "该记录已存在，请检查是否重复操作或数据冲突。"
+    elif "1452" in error_str or "foreign key" in error_str:
+        return "数据关联冲突：被引用的记录不存在，或操作违反了外键约束。"
+    elif "1451" in error_str:
+        return "无法删除：该记录仍被其他数据引用，请先处理关联记录。"
+    elif "1406" in error_str or "truncated" in error_str:
+        return "输入数据过长，请检查字段内容长度。"
+    elif "1364" in error_str or "not enough" in error_str:
+        return "必填字段缺失，请检查所有必要字段已填写。"
+    elif "45000" in error_str:
+        # 自定义业务错误（来自存储过程 SIGNAL）
+        if "采集日期" in error_str:
+            return "采集日期不能晚于当前日期。"
+        elif "存在" in error_str:
+            return error_str
+        elif "不能" in error_str:
+            return error_str
+        return str(error)
+    elif "connection" in error_str or "timeout" in error_str:
+        return "数据库连接失败，请检查数据库服务是否在线。"
+    else:
+        return str(error)
 
 
 def _get_secret(key: str, default: str) -> str:
@@ -108,7 +140,7 @@ def execute_action(sql, params=None):
         return True, None
     except Exception as e:
         conn.rollback()
-        return False, str(e)
+        return False, _translate_db_error(e)
     finally:
         if cursor is not None:
             cursor.close()
@@ -125,7 +157,7 @@ def call_procedure(name, args=None):
         return True, None
     except Exception as e:
         conn.rollback()
-        return False, str(e)
+        return False, _translate_db_error(e)
     finally:
         if cursor is not None:
             cursor.close()
