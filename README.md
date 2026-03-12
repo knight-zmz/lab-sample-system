@@ -28,16 +28,6 @@
 - 记录中心：读取 `v_current_borrowed_samples` 与 `sample_transactions`
 - 项目管理：维护 `projects`，查看 `v_project_sample_statistics`
 
-## 初始化数据库
-
-先在 MySQL 中执行以下脚本：
-
-```sql
-SOURCE sql/lab_sample_db.sql;
-```
-
-该脚本会重建数据库 `lab_sample_db`，并创建基础表、索引、视图、函数、触发器和存储过程。
-
 ## 运行方式
 
 安装依赖：
