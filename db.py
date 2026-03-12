@@ -1,6 +1,6 @@
 #数据库工具模块
 import os
-import time
+from urllib.parse import unquote, urlparse
 
 import pandas as pd
 import pymysql
@@ -11,7 +11,8 @@ def _translate_db_error(error: Exception) -> str:
     """
     把 MySQL 异常翻译成用户友好的提示信息。
     """
-    error_str = str(error).lower()
+    raw_error = str(error)
+    error_str = raw_error.lower()
     
     if "1062" in error_str or "unique" in error_str or "duplicate" in error_str:
         return "该记录已存在，请检查是否重复操作或数据冲突。"
@@ -28,20 +29,19 @@ def _translate_db_error(error: Exception) -> str:
         if "采集日期" in error_str:
             return "采集日期不能晚于当前日期。"
         elif "存在" in error_str:
-            return error_str
+            return raw_error
         elif "不能" in error_str:
-            return error_str
-        return str(error)
+            return raw_error
+        return raw_error
     elif "connection" in error_str or "timeout" in error_str:
         return "数据库连接失败，请检查数据库服务是否在线。"
     else:
         return str(error)
 
 
-def _get_secret(key: str, default: str) -> str:
+def _get_secret_or_env(key: str, default: str = "") -> str:
     """
-    优先读取 Streamlit secrets，其次读取环境变量，最后用默认值。
-    保证始终返回 str，避免类型检查器关于可选类型的报错。
+    优先读取 Streamlit secrets，再读取环境变量，最后返回默认值。
     """
     try:
         if key in st.secrets:
@@ -54,19 +54,70 @@ def _get_secret(key: str, default: str) -> str:
     return default
 
 
+def _get_db_url() -> str:
+    """
+    兼容 Railway 常用变量：MYSQL_URL / DATABASE_URL。
+    """
+    for key in ("MYSQL_URL", "DATABASE_URL"):
+        value = _get_secret_or_env(key, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def _parse_db_url(url: str) -> dict:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("mysql", "mysql+pymysql"):
+        raise ValueError("数据库 URL 必须以 mysql:// 或 mysql+pymysql:// 开头")
+
+    database = parsed.path.lstrip("/")
+    if not parsed.hostname or not parsed.username or not database:
+        raise ValueError("数据库 URL 缺少 host/user/database 信息")
+
+    return {
+        "host": parsed.hostname,
+        "user": unquote(parsed.username),
+        "password": unquote(parsed.password or ""),
+        "database": unquote(database),
+        "port": int(parsed.port or 3306),
+        "charset": "utf8mb4",
+    }
+
+
+def _get_db_config() -> dict:
+    url = _get_db_url()
+    if url:
+        return _parse_db_url(url)
+
+    # 兜底到单独变量；不再提供明文默认密码。
+    host = _get_secret_or_env("DB_HOST", "127.0.0.1")
+    user = _get_secret_or_env("DB_USER", "root")
+    password = _get_secret_or_env("DB_PASSWORD", "")
+    database = _get_secret_or_env("DB_NAME", "lab_sample_db")
+    port = int(_get_secret_or_env("DB_PORT", "3306"))
+
+    if not password:
+        raise ValueError(
+            "未配置数据库密码。请在环境变量或 .streamlit/secrets.toml 中设置 DB_PASSWORD，"
+            "或直接设置 MYSQL_URL / DATABASE_URL。"
+        )
+
+    return {
+        "host": host,
+        "user": user,
+        "password": password,
+        "database": database,
+        "port": port,
+        "charset": "utf8mb4",
+    }
+
+
 def get_connection():
     try:
-        conn = pymysql.connect(
-            host=_get_secret("DB_HOST", "127.0.0.1"),
-            user=_get_secret("DB_USER", "root"),
-            password=_get_secret("DB_PASSWORD", "root1234"),
-            database=_get_secret("DB_NAME", "lab_sample_db"),
-            port=int(_get_secret("DB_PORT", "3306")),
-            charset="utf8mb4"
-        )
+        conn = pymysql.connect(**_get_db_config())
         return conn
     except Exception as e:
-        st.error(f"数据库连接失败: {e}")
+        st.error(f"数据库连接失败: {_translate_db_error(e)}")
         st.stop()
 
 
@@ -122,7 +173,7 @@ def execute(sql, params=None):
         return True
     except Exception as e:
         conn.rollback()
-        st.error(str(e))
+        st.error(_translate_db_error(e))
         return False
     finally:
         if cursor is not None:

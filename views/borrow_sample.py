@@ -1,3 +1,4 @@
+import time as time_module
 from datetime import datetime, time
 
 import streamlit as st
@@ -44,10 +45,10 @@ def run():
         return_date = st.date_input("预计归还日期")
         return_time = st.time_input("预计归还时间", value=time(18, 0))
 
-    purpose = st.text_input("借用用途", placeholder="例如：实验检测、复核分析")
-    note = st.text_area("借用备注", placeholder="可填写附加说明")
+    purpose = st.text_input("借用用途", placeholder="例如：实验检测、复核分析", key="borrow_purpose_input")
+    note = st.text_area("借用备注", placeholder="可填写附加说明", key="borrow_note_textarea")
 
-    if st.button("登记借用"):
+    if st.button("登记借用", key="borrow_submit"):
         expected_return_at = datetime.combine(return_date, return_time)
 
         success, error_message = call_procedure(
@@ -62,7 +63,9 @@ def run():
         )
 
         if success:
-            st.success("借用登记成功。样本状态已更新为 borrowed，并写入历史流水。")
+            st.success("✓ 借用登记成功！样本状态已更新为 borrowed，借用单据和历史流水已写入。")
+            time_module.sleep(1.2)
+            st.rerun()
         else:
-            st.error(f"借用登记失败：{error_message}")
+            st.error(f"✗ 借用登记失败：{error_message}")
         

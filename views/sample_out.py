@@ -1,3 +1,5 @@
+import time as time_module
+
 import streamlit as st
 
 from db import call_procedure, query_df
@@ -55,9 +57,11 @@ def run():
                 )
 
                 if success:
-                    st.success("样本移位成功，MOVE 历史流水已写入。")
+                    st.success("✓ 样本移位成功！MOVE 历史流水已写入数据库。")
+                    time_module.sleep(1.2)
+                    st.rerun()
                 else:
-                    st.error(f"样本移位失败：{error_message}")
+                    st.error(f"✗ 样本移位失败：{error_message}")
 
     with dispose_tab:
         st.markdown("废弃是终止性状态，只允许对当前处于 available 状态的样本执行。")
@@ -83,7 +87,9 @@ def run():
                 )
 
                 if success:
-                    st.success("样本废弃成功，状态已更新为 disposed。")
+                    st.success("✓ 样本废弃成功！状态已更新为 disposed，DISPOSE 历史流水已写入。")
+                    time_module.sleep(1.2)
+                    st.rerun()
                 else:
-                    st.error(f"样本废弃失败：{error_message}")
+                    st.error(f"✗ 样本废弃失败：{error_message}")
 

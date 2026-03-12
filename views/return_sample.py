@@ -1,3 +1,5 @@
+import time as time_module
+
 import streamlit as st
 
 from db import call_procedure, query_df
@@ -38,12 +40,13 @@ def run():
 
     sample_label = st.selectbox(
         "选择借用记录",
-        list(borrow_options.keys())
+        list(borrow_options.keys()),
+        key="return_borrow_select"
     )
 
-    note = st.text_area("归还备注", placeholder="例如：样本完整归还，状态正常")
+    note = st.text_area("归还备注", placeholder="例如：样本完整归还，状态正常", key="return_note_textarea")
 
-    if st.button("确认归还"):
+    if st.button("确认归还", key="return_submit"):
         success, error_message = call_procedure(
             "sp_return_sample",
             (
@@ -54,6 +57,8 @@ def run():
         )
 
         if success:
-            st.success("归还成功。样本状态已恢复为 available，并写入 RETURN 历史流水。")
+            st.success("✓ 归还成功！样本状态已恢复为 available，RETURN 历史流水已写入。")
+            time_module.sleep(1.2)
+            st.rerun()
         else:
-            st.error(f"归还失败：{error_message}")
+            st.error(f"✗ 归还失败：{error_message}")

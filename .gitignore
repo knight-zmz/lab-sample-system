@@ -1,8 +1,13 @@
 __pycache__/
 *.pyc
 .env
+.env.*
 .venv/
 venv/
+ENV/
+env/
 checkpoint.md
 sql/
 .streamlit/secrets.toml
+.streamlit/secrets.toml.*
+.python-version

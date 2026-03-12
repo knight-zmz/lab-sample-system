@@ -1,4 +1,5 @@
 from datetime import date
+import time as time_module
 
 import streamlit as st
 
@@ -105,9 +106,11 @@ def run():
                 )
 
                 if success:
-                    st.success("项目新增成功。")
+                    st.success("✓ 项目新增成功！")
+                    time_module.sleep(1.0)
+                    st.rerun()
                 else:
-                    st.error(f"项目新增失败：{error_message}")
+                    st.error(f"✗ 项目新增失败：{error_message}")
 
     with edit_tab:
         if projects_df.empty:
@@ -174,9 +177,11 @@ def run():
                 )
 
                 if success:
-                    st.success("项目更新成功。")
+                    st.success("✓ 项目更新成功！")
+                    time_module.sleep(1.0)
+                    st.rerun()
                 else:
-                    st.error(f"项目更新失败：{error_message}")
+                    st.error(f"✗ 项目更新失败：{error_message}")
 
         if delete_submitted:
             related_sample_count = query_df(
@@ -193,7 +198,9 @@ def run():
                 )
 
                 if success:
-                    st.success("项目删除成功。")
+                    st.success("✓ 项目删除成功！")
+                    time_module.sleep(1.0)
+                    st.rerun()
                 else:
-                    st.error(f"项目删除失败：{error_message}")
+                    st.error(f"✗ 项目删除失败：{error_message}")
 
