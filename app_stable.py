@@ -1,14 +1,13 @@
 #主入口 app_stable.py，负责：页面导航，加载页面
 import streamlit as st
 
-from pages import sample_view
-from pages import sample_add
-from pages import sample_out
-from pages import io_records
-from pages import project_manage
-from pages import borrow_sample
-from pages import return_sample
-
+from views import sample_view
+from views import sample_add
+from views import sample_out
+from views import io_records
+from views import project_manage
+from views import borrow_sample
+from views import return_sample
 
 st.set_page_config(
     page_title="实验室样本管理系统",

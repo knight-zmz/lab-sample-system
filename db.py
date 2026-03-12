@@ -5,14 +5,30 @@ import pandas as pd
 import streamlit as st
 
 
+def _get_secret(key: str, default: str) -> str:
+    """
+    优先读取 Streamlit secrets，其次读取环境变量，最后用默认值。
+    保证始终返回 str，避免类型检查器关于可选类型的报错。
+    """
+    try:
+        if key in st.secrets:
+            return str(st.secrets[key])
+    except Exception:
+        pass
+    value = os.getenv(key)
+    if value is not None:
+        return value
+    return default
+
+
 def get_connection():
     try:
         conn = pymysql.connect(
-            host=os.getenv("DB_HOST", "127.0.0.1"),
-            user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", "root1234"),
-            database=os.getenv("DB_NAME", "lab_sample_db"),
-            port=int(os.getenv("DB_PORT", 3306)),
+            host=_get_secret("DB_HOST", "127.0.0.1"),
+            user=_get_secret("DB_USER", "root"),
+            password=_get_secret("DB_PASSWORD", "root1234"),
+            database=_get_secret("DB_NAME", "lab_sample_db"),
+            port=int(_get_secret("DB_PORT", "3306")),
             charset="utf8mb4"
         )
         return conn
