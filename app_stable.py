@@ -1,6 +1,8 @@
 #主入口 app_stable.py，负责：页面导航，加载页面
 import streamlit as st
 
+__version__ = "1.1.0"
+
 from views import borrow_sample
 from views import io_records
 from views import project_manage
@@ -168,6 +170,9 @@ menu = st.sidebar.radio(
     ],
     label_visibility="collapsed"
 )
+
+st.sidebar.markdown("---")
+st.sidebar.caption(f"版本 v{__version__}")
 
 if menu == "样本总览":
     sample_view.run()
