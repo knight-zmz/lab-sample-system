@@ -1,11 +1,18 @@
-import time as time_module
-
 import streamlit as st
 
 from db import call_procedure, query_df
+from utils.submit_guard import run_submit_guard, show_success_pending_if_any
+
+_KEY_MOVE = "sample_out_move"
+_KEY_DISPOSE = "sample_out_dispose"
 
 
 def run():
+    if show_success_pending_if_any(_KEY_MOVE):
+        return
+    if show_success_pending_if_any(_KEY_DISPOSE):
+        return
+
     st.subheader("样本出库与状态处理")
     st.caption("根据数据库设计，这里将原“出库”拆成两类明确动作：库内移位和样本废弃。")
 
@@ -46,22 +53,24 @@ def run():
             move_note = st.text_area("移位备注", placeholder="例如：转存至 B 区 3 层", key="move_note")
 
             if st.button("执行移位", key="move_submit"):
-                success, error_message = call_procedure(
-                    "sp_move_sample",
-                    (
-                        move_options[selected_sample],
-                        location_options[selected_location],
-                        user_options[selected_user],
-                        move_note.strip() or None,
-                    )
-                )
 
-                if success:
-                    st.success("✓ 样本移位成功！MOVE 历史流水已写入数据库。")
-                    time_module.sleep(1.2)
-                    st.rerun()
-                else:
-                    st.error(f"✗ 样本移位失败：{error_message}")
+                def do_submit():
+                    return call_procedure(
+                        "sp_move_sample",
+                        (
+                            move_options[selected_sample],
+                            location_options[selected_location],
+                            user_options[selected_user],
+                            move_note.strip() or None,
+                        ),
+                    )
+
+                run_submit_guard(
+                    _KEY_MOVE,
+                    success_message="✓ 样本移位成功！MOVE 历史流水已写入数据库。",
+                    error_message="✗ 样本移位失败：{msg}",
+                    run_callback=do_submit,
+                )
 
     with dispose_tab:
         st.markdown("废弃是终止性状态，只允许对当前处于 available 状态的样本执行。")
@@ -77,19 +86,21 @@ def run():
             dispose_note = st.text_area("废弃说明", placeholder="例如：污染失效，按流程废弃", key="dispose_note")
 
             if st.button("执行废弃", key="dispose_submit"):
-                success, error_message = call_procedure(
-                    "sp_dispose_sample",
-                    (
-                        dispose_options[selected_sample],
-                        user_options[selected_user],
-                        dispose_note.strip() or None,
-                    )
-                )
 
-                if success:
-                    st.success("✓ 样本废弃成功！状态已更新为 disposed，DISPOSE 历史流水已写入。")
-                    time_module.sleep(1.2)
-                    st.rerun()
-                else:
-                    st.error(f"✗ 样本废弃失败：{error_message}")
+                def do_submit():
+                    return call_procedure(
+                        "sp_dispose_sample",
+                        (
+                            dispose_options[selected_sample],
+                            user_options[selected_user],
+                            dispose_note.strip() or None,
+                        ),
+                    )
+
+                run_submit_guard(
+                    _KEY_DISPOSE,
+                    success_message="✓ 样本废弃成功！状态已更新为 disposed，DISPOSE 历史流水已写入。",
+                    error_message="✗ 样本废弃失败：{msg}",
+                    run_callback=do_submit,
+                )
 

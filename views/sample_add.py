@@ -1,11 +1,15 @@
-import time
-
 import streamlit as st
 
 from db import call_procedure, query_df
+from utils.submit_guard import run_submit_guard, show_success_pending_if_any
+
+_SUBMIT_KEY = "sample_add"
 
 
 def run():
+    if show_success_pending_if_any(_SUBMIT_KEY):
+        return
+
     st.subheader("新增样本")
     st.caption("样本登记通过数据库存储过程完成，自动生成样本编号并写入历史流水。")
 
@@ -42,22 +46,24 @@ def run():
         if not sample_name.strip():
             st.warning("请填写样本名称。")
         else:
-            success, error_message = call_procedure(
-                "sp_register_sample",
-                (
-                    sample_name.strip(),
-                    type_dict[type_name],
-                    project_options[project_name],
-                    location_dict[location_name],
-                    collected_date,
-                    user_options[created_by],
-                    remark.strip() or None,
-                )
-            )
 
-            if success:
-                st.success("✓ 样本登记成功！数据库已自动生成样本编号，并写入 CREATE 历史流水。")
-                time.sleep(1.2)
-                st.rerun()
-            else:
-                st.error(f"✗ 样本登记失败：{error_message}")
+            def do_submit():
+                return call_procedure(
+                    "sp_register_sample",
+                    (
+                        sample_name.strip(),
+                        type_dict[type_name],
+                        project_options[project_name],
+                        location_dict[location_name],
+                        collected_date,
+                        user_options[created_by],
+                        remark.strip() or None,
+                    ),
+                )
+
+            run_submit_guard(
+                _SUBMIT_KEY,
+                success_message="✓ 样本登记成功！数据库已自动生成样本编号，并写入 CREATE 历史流水。",
+                error_message="✗ 样本登记失败：{msg}",
+                run_callback=do_submit,
+            )

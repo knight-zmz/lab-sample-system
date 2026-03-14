@@ -1,12 +1,17 @@
-import time as time_module
 from datetime import datetime, time
 
 import streamlit as st
 
 from db import call_procedure, query_df
+from utils.submit_guard import run_submit_guard, show_success_pending_if_any
+
+_SUBMIT_KEY = "borrow_sample"
 
 
 def run():
+    if show_success_pending_if_any(_SUBMIT_KEY):
+        return
+
     st.subheader("样本借用")
     st.caption("借用登记通过数据库存储过程完成，样本状态和借用单据会同步更新。")
 
@@ -51,21 +56,22 @@ def run():
     if st.button("登记借用", key="borrow_submit"):
         expected_return_at = datetime.combine(return_date, return_time)
 
-        success, error_message = call_procedure(
-            "sp_borrow_sample",
-            (
-                sample_labels[sample],
-                user_dict[user],
-                expected_return_at,
-                purpose.strip() or None,
-                note.strip() or None,
+        def do_submit():
+            return call_procedure(
+                "sp_borrow_sample",
+                (
+                    sample_labels[sample],
+                    user_dict[user],
+                    expected_return_at,
+                    purpose.strip() or None,
+                    note.strip() or None,
+                ),
             )
-        )
 
-        if success:
-            st.success("✓ 借用登记成功！样本状态已更新为 borrowed，借用单据和历史流水已写入。")
-            time_module.sleep(1.2)
-            st.rerun()
-        else:
-            st.error(f"✗ 借用登记失败：{error_message}")
+        run_submit_guard(
+            _SUBMIT_KEY,
+            success_message="✓ 借用登记成功！样本状态已更新为 borrowed，借用单据和历史流水已写入。",
+            error_message="✗ 借用登记失败：{msg}",
+            run_callback=do_submit,
+        )
         

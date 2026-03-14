@@ -1,11 +1,23 @@
 from datetime import date
-import time as time_module
 
 import streamlit as st
 
 from db import execute_action, query_df
+from utils.submit_guard import run_submit_guard, show_success_pending_if_any
+
+_KEY_CREATE = "project_create"
+_KEY_UPDATE = "project_update"
+_KEY_DELETE = "project_delete"
+
 
 def run():
+    if show_success_pending_if_any(_KEY_CREATE):
+        return
+    if show_success_pending_if_any(_KEY_UPDATE):
+        return
+    if show_success_pending_if_any(_KEY_DELETE):
+        return
+
     st.subheader("项目管理")
     st.caption("提供项目主数据查看、统计和维护能力，并与样本项目关联保持一致。")
 
@@ -81,36 +93,38 @@ def run():
             submitted = st.form_submit_button("新增项目")
 
         if submitted:
-            if not project_name.strip():
+            if not (project_name or "").strip():
                 st.warning("请填写项目名称。")
             elif end_date is not None and start_date is None:
                 st.warning("填写结束日期时，请同时填写开始日期。")
             else:
-                success, error_message = execute_action(
-                    """
-                    INSERT INTO projects (
-                        project_name,
-                        principal_investigator,
-                        start_date,
-                        end_date,
-                        description
-                    ) VALUES (%s, %s, %s, %s, %s)
-                    """,
-                    (
-                        project_name.strip(),
-                        principal_investigator.strip() or None,
-                        start_date,
-                        end_date,
-                        description.strip() or None,
-                    )
-                )
 
-                if success:
-                    st.success("✓ 项目新增成功！")
-                    time_module.sleep(1.0)
-                    st.rerun()
-                else:
-                    st.error(f"✗ 项目新增失败：{error_message}")
+                def do_submit():
+                    return execute_action(
+                        """
+                        INSERT INTO projects (
+                            project_name,
+                            principal_investigator,
+                            start_date,
+                            end_date,
+                            description
+                        ) VALUES (%s, %s, %s, %s, %s)
+                        """,
+                        (
+                            (project_name or "").strip(),
+                            (principal_investigator or "").strip() or None,
+                            start_date,
+                            end_date,
+                            (description or "").strip() or None,
+                        ),
+                    )
+
+                run_submit_guard(
+                    _KEY_CREATE,
+                    success_message="✓ 项目新增成功！",
+                    error_message="✗ 项目新增失败：{msg}",
+                    run_callback=do_submit,
+                )
 
     with edit_tab:
         if projects_df.empty:
@@ -150,38 +164,40 @@ def run():
             delete_submitted = st.form_submit_button("删除项目")
 
         if update_submitted:
-            if not project_name.strip():
+            if not (project_name or "").strip():
                 st.warning("请填写项目名称。")
             elif end_date is not None and start_date is None:
                 st.warning("填写结束日期时，请同时填写开始日期。")
             else:
-                success, error_message = execute_action(
-                    """
-                    UPDATE projects
-                    SET
-                        project_name = %s,
-                        principal_investigator = %s,
-                        start_date = %s,
-                        end_date = %s,
-                        description = %s
-                    WHERE project_id = %s
-                    """,
-                    (
-                        project_name.strip(),
-                        principal_investigator.strip() or None,
-                        start_date,
-                        end_date,
-                        description.strip() or None,
+
+                def do_submit():
+                    return execute_action(
+                        """
+                        UPDATE projects
+                        SET
+                            project_name = %s,
+                            principal_investigator = %s,
+                            start_date = %s,
+                            end_date = %s,
+                            description = %s
+                        WHERE project_id = %s
+                        """,
+                        (
+                            (project_name or "").strip(),
+                            (principal_investigator or "").strip() or None,
+                            start_date,
+                            end_date,
+                        (description or "").strip() or None,
                         int(selected_project["project_id"]),
-                    )
+                    ),
                 )
 
-                if success:
-                    st.success("✓ 项目更新成功！")
-                    time_module.sleep(1.0)
-                    st.rerun()
-                else:
-                    st.error(f"✗ 项目更新失败：{error_message}")
+                run_submit_guard(
+                    _KEY_UPDATE,
+                    success_message="✓ 项目更新成功！",
+                    error_message="✗ 项目更新失败：{msg}",
+                    run_callback=do_submit,
+                )
 
         if delete_submitted:
             related_sample_count = query_df(
@@ -192,15 +208,17 @@ def run():
             if related_sample_count > 0:
                 st.warning(f"该项目仍关联 {related_sample_count} 个样本，不能直接删除。")
             else:
-                success, error_message = execute_action(
-                    "DELETE FROM projects WHERE project_id = %s",
-                    (int(selected_project["project_id"]),)
-                )
 
-                if success:
-                    st.success("✓ 项目删除成功！")
-                    time_module.sleep(1.0)
-                    st.rerun()
-                else:
-                    st.error(f"✗ 项目删除失败：{error_message}")
+                def do_submit():
+                    return execute_action(
+                        "DELETE FROM projects WHERE project_id = %s",
+                        (int(selected_project["project_id"]),),
+                    )
+
+                run_submit_guard(
+                    _KEY_DELETE,
+                    success_message="✓ 项目删除成功！",
+                    error_message="✗ 项目删除失败：{msg}",
+                    run_callback=do_submit,
+                )
 
