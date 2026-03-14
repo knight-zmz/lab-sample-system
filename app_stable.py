@@ -1,7 +1,8 @@
 #主入口 app_stable.py，负责：页面导航，加载页面
 import streamlit as st
 
-__version__ = "1.1.0"
+# 每次发版或功能/修复更新后请修改此处版本号，便于确认是否生效（侧边栏底部显示）
+__version__ = "1.2.0"
 
 from views import borrow_sample
 from views import io_records
@@ -138,6 +139,43 @@ st.markdown(
     .stSuccess, .stError, .stWarning {
         border-radius: var(--radius-sm);
         padding: 0.6rem 1rem;
+    }
+
+    .submit-success-banner {
+        display: flex;
+        align-items: flex-start;
+        gap: 1rem;
+        padding: 1.25rem 1.5rem;
+        margin: 1rem 0;
+        border-radius: var(--radius);
+        background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
+        border: 1px solid #81c784;
+        box-shadow: 0 4px 20px rgba(76, 175, 80, 0.2);
+    }
+    .submit-success-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        border-radius: 50%;
+        background: #2e7d32;
+        color: #fff;
+        font-size: 1.35rem;
+        font-weight: bold;
+        flex-shrink: 0;
+    }
+    .submit-success-banner strong {
+        display: block;
+        color: #1b5e20;
+        font-size: 1.1rem;
+        margin-bottom: 0.35rem;
+    }
+    .submit-success-detail {
+        margin: 0;
+        color: #2e7d32;
+        font-size: 0.95rem;
+        line-height: 1.5;
     }
     </style>
     """,
