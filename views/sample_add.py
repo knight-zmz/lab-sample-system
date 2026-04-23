@@ -1,17 +1,21 @@
 import streamlit as st
 
 from db import call_procedure, query_df
+from permissions import require_permission
 from utils.submit_guard import run_submit_guard, show_success_pending_if_any
 
 _SUBMIT_KEY = "sample_add"
 
 
 def run():
+    if not require_permission("sample.write", "当前角色无权登记样本。"):
+        return
+
     if show_success_pending_if_any(_SUBMIT_KEY):
         return
 
     st.subheader("新增样本")
-    st.caption("样本登记通过数据库存储过程完成，自动生成样本编号并写入历史流水。")
+    st.caption("样本登记通过应用层事务完成，自动生成样本编号并写入历史流水。")
 
     types = query_df("SELECT type_id, type_name FROM sample_types")
     locations = query_df("SELECT location_id, location_name FROM storage_locations")

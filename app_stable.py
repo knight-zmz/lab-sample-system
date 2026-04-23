@@ -2,15 +2,20 @@
 import streamlit as st
 
 # 每次发版或功能/修复更新后请修改此处版本号，便于确认是否生效（侧边栏底部显示）
-__version__ = "1.2.0"
+__version__ = "2.0.0"
 
+from auth import get_current_user, logout, render_login_form
+from permissions import can
+from utils.streamlit_compat import safe_radio, safe_rerun
 from views import borrow_sample
+from views import audit_logs
 from views import io_records
 from views import project_manage
 from views import return_sample
 from views import sample_add
 from views import sample_out
 from views import sample_view
+from views import user_manage
 
 st.set_page_config(
     page_title="实验室样本管理系统",
@@ -186,28 +191,39 @@ st.markdown(
     """
     <section class="hero-card">
         <h1>实验室样本管理系统</h1>
-        <p>基于 MySQL 存储过程与视图的样本全生命周期管理：登记、借用、归还、移位、废弃与项目管理，均在此统一操作。</p>
+        <p>基于 SQLite 与应用层事务的样本全生命周期管理：登记、借用、归还、移位、废弃与项目管理，均在此统一操作。</p>
     </section>
     """,
     unsafe_allow_html=True
 )
 
-st.sidebar.markdown("### 功能导航")
-st.sidebar.caption("关键操作均通过存储过程执行，数据一致性与约束由数据库保障。")
+if not render_login_form():
+    st.stop()
 
-menu = st.sidebar.radio(
-    "选择模块",
-    [
-        "样本总览",
-        "样本登记",
-        "样本状态处理",
-        "记录中心",
-        "项目管理",
-        "样本借用",
-        "样本归还"
-    ],
-    label_visibility="collapsed"
-)
+current_user = get_current_user()
+
+st.sidebar.markdown("### 功能导航")
+st.sidebar.caption(f"当前用户：{current_user['real_name']}（{current_user['role']}）")
+
+menu_options = []
+if can("sample.view"):
+    menu_options.append("样本总览")
+if can("sample.write"):
+    menu_options.extend(["样本登记", "样本状态处理", "样本借用", "样本归还"])
+if can("record.view"):
+    menu_options.append("记录中心")
+if can("project.view"):
+    menu_options.append("项目管理")
+if can("user.manage"):
+    menu_options.append("用户管理")
+if can("audit.view"):
+    menu_options.append("系统审计日志")
+
+menu = safe_radio(st.sidebar, "选择模块", menu_options)
+
+if st.sidebar.button("退出登录"):
+    logout()
+    safe_rerun()
 
 st.sidebar.markdown("---")
 st.sidebar.caption(f"版本 v{__version__}")
@@ -232,3 +248,7 @@ elif menu == "样本借用":
 
 elif menu == "样本归还":
     return_sample.run()
+elif menu == "用户管理":
+    user_manage.run()
+elif menu == "系统审计日志":
+    audit_logs.run()

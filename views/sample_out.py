@@ -1,6 +1,7 @@
 import streamlit as st
 
 from db import call_procedure, query_df
+from permissions import require_permission
 from utils.submit_guard import run_submit_guard, show_success_pending_if_any
 
 _KEY_MOVE = "sample_out_move"
@@ -8,6 +9,9 @@ _KEY_DISPOSE = "sample_out_dispose"
 
 
 def run():
+    if not require_permission("sample.write", "当前角色无权执行样本状态处理。"):
+        return
+
     if show_success_pending_if_any(_KEY_MOVE):
         return
     if show_success_pending_if_any(_KEY_DISPOSE):

@@ -5,24 +5,25 @@
 import html
 import time
 import streamlit as st
+from utils.streamlit_compat import safe_rerun
 
 
-def is_submitting(key: str) -> bool:
+def is_submitting(key):
     """当前是否处于「已点击提交、等待结果」状态。"""
     return bool(st.session_state.get(key, False))
 
 
-def set_submitting(key: str, value: bool) -> None:
+def set_submitting(key, value):
     st.session_state[key] = value
 
 
-def set_success_pending(key: str, message: str, error: bool = False) -> None:
+def set_success_pending(key, message, error=False):
     """标记本次提交已完成，下次 run 时只展示结果并刷新（避免重复执行）。"""
     st.session_state[f"_success_pending_{key}"] = message
     st.session_state[f"_success_pending_error_{key}"] = error
 
 
-def consume_success_pending(key: str) -> tuple[str | None, bool]:
+def consume_success_pending(key):
     """取出并清除「待展示的成功/失败信息」，返回 (message, is_error)。"""
     msg = st.session_state.pop(f"_success_pending_{key}", None)
     is_err = st.session_state.pop(f"_success_pending_error_{key}", False)
@@ -50,11 +51,11 @@ def _run_with_visible_progress(run_callback):
 
 
 def run_submit_guard(
-    key: str,
-    success_message: str,
-    error_message: str,
+    key,
+    success_message,
+    error_message,
     run_callback,
-) -> bool:
+):
     """
     在带明显进度提示和锁的情况下执行一次提交，并处理成功后的防重复逻辑。
     """
@@ -67,7 +68,7 @@ def run_submit_guard(
         success, err_msg = _run_with_visible_progress(run_callback)
         if success:
             set_success_pending(key, success_message, error=False)
-            st.rerun()
+            safe_rerun()
             return True
         else:
             st.error(error_message.format(msg=err_msg))
@@ -80,7 +81,7 @@ def run_submit_guard(
             set_submitting(key, False)
 
 
-def show_success_pending_if_any(key: str) -> bool:
+def show_success_pending_if_any(key):
     """
     若存在待展示的成功/失败信息，则用醒目方式展示，停留约 2.5 秒后自动刷新回到表单。
     """
@@ -92,7 +93,7 @@ def show_success_pending_if_any(key: str) -> bool:
 
     if is_error:
         st.error(msg)
-        st.rerun()
+        safe_rerun()
         return True
 
     # 成功：醒目横幅 + 自动停留后刷新
@@ -110,5 +111,5 @@ def show_success_pending_if_any(key: str) -> bool:
         unsafe_allow_html=True,
     )
     time.sleep(2.5)
-    st.rerun()
+    safe_rerun()
     return True

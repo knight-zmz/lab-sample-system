@@ -1,9 +1,14 @@
 import streamlit as st
 
 from db import query_df
+from permissions import require_permission
+from utils.streamlit_compat import safe_dataframe
 
 
 def run():
+    if not require_permission("sample.view", "仅允许查看样本信息。"):
+        return
+
     st.subheader("样本信息总览")
 
     df = query_df(
@@ -63,4 +68,4 @@ def run():
     summary_col3.metric("借出中", int((filtered_df["status"] == "borrowed").sum()))
     summary_col4.metric("已废弃", int((filtered_df["status"] == "disposed").sum()))
 
-    st.dataframe(filtered_df, width="stretch")
+    safe_dataframe(st, filtered_df, width="stretch")

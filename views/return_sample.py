@@ -1,17 +1,24 @@
 import streamlit as st
 
+from auth import get_current_user
 from db import call_procedure, query_df
+from permissions import require_permission
+from utils.streamlit_compat import safe_dataframe
 from utils.submit_guard import run_submit_guard, show_success_pending_if_any
 
 _SUBMIT_KEY = "return_sample"
 
 
 def run():
+    if not require_permission("sample.write", "当前角色无权执行样本归还。"):
+        return
+
     if show_success_pending_if_any(_SUBMIT_KEY):
         return
 
     st.subheader("样本归还")
-    st.caption("归还通过数据库存储过程闭环处理，自动更新借用单据、样本状态和历史流水。")
+    st.caption("归还通过应用层事务闭环处理，自动更新借用单据、样本状态和历史流水。")
+    current_user = get_current_user()
 
     df = query_df(
         """
@@ -35,7 +42,7 @@ def run():
         st.info("当前没有处于借用状态的样本。")
         return
 
-    st.dataframe(df, width="stretch")
+    safe_dataframe(st, df, width="stretch")
 
     borrow_options = {
         f"借用单 {row.borrow_id} | {row.sample_code} | {row.sample_name} | {row.borrower_name}": row.sample_id
@@ -57,7 +64,7 @@ def run():
                 "sp_return_sample",
                 (
                     borrow_options[sample_label],
-                    None,
+                    current_user["user_id"] if current_user else None,
                     note.strip() or None,
                 ),
             )

@@ -3,17 +3,21 @@ from datetime import datetime, time
 import streamlit as st
 
 from db import call_procedure, query_df
+from permissions import require_permission
 from utils.submit_guard import run_submit_guard, show_success_pending_if_any
 
 _SUBMIT_KEY = "borrow_sample"
 
 
 def run():
+    if not require_permission("sample.write", "当前角色无权执行样本借用。"):
+        return
+
     if show_success_pending_if_any(_SUBMIT_KEY):
         return
 
     st.subheader("样本借用")
-    st.caption("借用登记通过数据库存储过程完成，样本状态和借用单据会同步更新。")
+    st.caption("借用登记通过应用层事务完成，样本状态和借用单据会同步更新。")
 
     samples = query_df(
         """

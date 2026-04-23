@@ -2,7 +2,13 @@ from datetime import date
 
 import streamlit as st
 
-from db import execute_action, query_df
+from audit import log_event
+from auth import get_current_user
+from db import execute_action, get_connection, query_df
+from permissions import can, require_permission
+from services.project_service import create_project, delete_project, update_project
+from services.sample_service import BusinessError
+from utils.streamlit_compat import safe_dataframe
 from utils.submit_guard import run_submit_guard, show_success_pending_if_any
 
 _KEY_CREATE = "project_create"
@@ -11,6 +17,9 @@ _KEY_DELETE = "project_delete"
 
 
 def run():
+    if not require_permission("project.view", "当前角色无权查看项目模块。"):
+        return
+
     if show_success_pending_if_any(_KEY_CREATE):
         return
     if show_success_pending_if_any(_KEY_UPDATE):
@@ -20,6 +29,8 @@ def run():
 
     st.subheader("项目管理")
     st.caption("提供项目主数据查看、统计和维护能力，并与样本项目关联保持一致。")
+    can_write = can("project.write")
+    current_user = get_current_user()
 
     projects_df = query_df(
         """
@@ -53,13 +64,13 @@ def run():
         if projects_df.empty:
             st.info("当前还没有项目数据。")
         else:
-            st.dataframe(projects_df, width="stretch")
+            safe_dataframe(st, projects_df, width="stretch")
 
         st.markdown("项目样本统计")
         if stats_df.empty:
             st.info("当前没有项目统计数据。")
         else:
-            st.dataframe(stats_df, width="stretch")
+            safe_dataframe(st, stats_df, width="stretch")
 
             selected_project_name = st.selectbox(
                 "查看项目关联样本",
@@ -79,9 +90,13 @@ def run():
             if samples_df.empty:
                 st.info("该项目当前没有关联样本。")
             else:
-                st.dataframe(samples_df, width="stretch")
+                safe_dataframe(st, samples_df, width="stretch")
 
     with create_tab:
+        if not can_write:
+            st.info("当前角色仅允许查看项目，不能新增。")
+            return
+
         with st.form("create_project_form"):
             project_name = st.text_input("项目名称")
             principal_investigator = st.text_input("项目负责人")
@@ -93,40 +108,48 @@ def run():
             submitted = st.form_submit_button("新增项目")
 
         if submitted:
-            if not (project_name or "").strip():
-                st.warning("请填写项目名称。")
-            elif end_date is not None and start_date is None:
-                st.warning("填写结束日期时，请同时填写开始日期。")
-            else:
-
-                def do_submit():
-                    return execute_action(
-                        """
-                        INSERT INTO projects (
-                            project_name,
-                            principal_investigator,
-                            start_date,
-                            end_date,
-                            description
-                        ) VALUES (%s, %s, %s, %s, %s)
-                        """,
-                        (
-                            (project_name or "").strip(),
-                            (principal_investigator or "").strip() or None,
-                            start_date,
-                            end_date,
-                            (description or "").strip() or None,
-                        ),
+            def do_submit():
+                conn = get_connection()
+                try:
+                    conn.execute("BEGIN")
+                    project_id = create_project(
+                        conn,
+                        project_name,
+                        principal_investigator,
+                        start_date,
+                        end_date,
+                        description,
                     )
+                    conn.commit()
+                    log_event(
+                        "project_admin",
+                        "create_project",
+                        "success",
+                        detail=f"创建项目: {project_name}",
+                        actor_user_id=current_user["user_id"] if current_user else None,
+                        actor_username=current_user["username"] if current_user else None,
+                        target_type="project",
+                        target_id=str(project_id),
+                    )
+                    return True, None
+                except Exception as e:
+                    conn.rollback()
+                    return False, str(e)
+                finally:
+                    conn.close()
 
-                run_submit_guard(
-                    _KEY_CREATE,
-                    success_message="✓ 项目新增成功！",
-                    error_message="✗ 项目新增失败：{msg}",
-                    run_callback=do_submit,
-                )
+            run_submit_guard(
+                _KEY_CREATE,
+                success_message="✓ 项目新增成功！",
+                error_message="✗ 项目新增失败：{msg}",
+                run_callback=do_submit,
+            )
 
     with edit_tab:
+        if not can_write:
+            st.info("当前角色仅允许查看项目，不能编辑。")
+            return
+
         if projects_df.empty:
             st.info("当前没有可编辑的项目。")
             return
@@ -164,61 +187,75 @@ def run():
             delete_submitted = st.form_submit_button("删除项目")
 
         if update_submitted:
-            if not (project_name or "").strip():
-                st.warning("请填写项目名称。")
-            elif end_date is not None and start_date is None:
-                st.warning("填写结束日期时，请同时填写开始日期。")
-            else:
-
-                def do_submit():
-                    return execute_action(
-                        """
-                        UPDATE projects
-                        SET
-                            project_name = %s,
-                            principal_investigator = %s,
-                            start_date = %s,
-                            end_date = %s,
-                            description = %s
-                        WHERE project_id = %s
-                        """,
-                        (
-                            (project_name or "").strip(),
-                            (principal_investigator or "").strip() or None,
-                            start_date,
-                            end_date,
-                        (description or "").strip() or None,
+            def do_submit():
+                conn = get_connection()
+                try:
+                    conn.execute("BEGIN")
+                    update_project(
+                        conn,
                         int(selected_project["project_id"]),
-                    ),
-                )
+                        project_name,
+                        principal_investigator,
+                        start_date,
+                        end_date,
+                        description,
+                    )
+                    conn.commit()
+                    log_event(
+                        "project_admin",
+                        "update_project",
+                        "success",
+                        detail=f"更新项目: {project_name}",
+                        actor_user_id=current_user["user_id"] if current_user else None,
+                        actor_username=current_user["username"] if current_user else None,
+                        target_type="project",
+                        target_id=str(int(selected_project["project_id"])),
+                    )
+                    return True, None
+                except Exception as e:
+                    conn.rollback()
+                    return False, str(e)
+                finally:
+                    conn.close()
 
-                run_submit_guard(
-                    _KEY_UPDATE,
-                    success_message="✓ 项目更新成功！",
-                    error_message="✗ 项目更新失败：{msg}",
-                    run_callback=do_submit,
-                )
+            run_submit_guard(
+                _KEY_UPDATE,
+                success_message="✓ 项目更新成功！",
+                error_message="✗ 项目更新失败：{msg}",
+                run_callback=do_submit,
+            )
 
         if delete_submitted:
-            related_sample_count = query_df(
-                "SELECT COUNT(*) AS sample_count FROM samples WHERE project_id = %s",
-                (int(selected_project["project_id"]),)
-            )["sample_count"].iloc[0]
-
-            if related_sample_count > 0:
-                st.warning(f"该项目仍关联 {related_sample_count} 个样本，不能直接删除。")
-            else:
-
-                def do_submit():
-                    return execute_action(
-                        "DELETE FROM projects WHERE project_id = %s",
-                        (int(selected_project["project_id"]),),
+            def do_submit():
+                conn = get_connection()
+                try:
+                    conn.execute("BEGIN")
+                    delete_project(conn, int(selected_project["project_id"]))
+                    conn.commit()
+                    log_event(
+                        "project_admin",
+                        "delete_project",
+                        "success",
+                        detail=f"删除项目: {selected_project['project_name']}",
+                        actor_user_id=current_user["user_id"] if current_user else None,
+                        actor_username=current_user["username"] if current_user else None,
+                        target_type="project",
+                        target_id=str(int(selected_project["project_id"])),
                     )
+                    return True, None
+                except BusinessError as e:
+                    conn.rollback()
+                    return False, str(e)
+                except Exception as e:
+                    conn.rollback()
+                    return False, str(e)
+                finally:
+                    conn.close()
 
-                run_submit_guard(
-                    _KEY_DELETE,
-                    success_message="✓ 项目删除成功！",
-                    error_message="✗ 项目删除失败：{msg}",
-                    run_callback=do_submit,
-                )
+            run_submit_guard(
+                _KEY_DELETE,
+                success_message="✓ 项目删除成功！",
+                error_message="✗ 项目删除失败：{msg}",
+                run_callback=do_submit,
+            )
 

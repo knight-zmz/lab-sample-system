@@ -1,0 +1,18 @@
+[Unit]
+Description=Lab Sample Streamlit App
+After=network.target
+
+[Service]
+Type=simple
+User=admin
+WorkingDirectory=/home/admin/lab-sample-system/lab-sample-system
+Environment=APP_DB_PATH=/home/admin/lab-sample-system/lab-sample-system/data/lab_sample.db
+Environment=APP_DEFAULT_ADMIN_USER=admin
+# 建议通过独立 env 文件或 systemctl set-environment 注入密码，避免硬编码
+# Environment=APP_DEFAULT_ADMIN_PASSWORD=admin123
+ExecStart=/home/admin/.venvs/py38/bin/streamlit run app_stable.py --server.address 0.0.0.0 --server.port 8501
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

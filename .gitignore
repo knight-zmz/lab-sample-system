@@ -7,8 +7,8 @@ venv/
 ENV/
 env/
 checkpoint.md
-sql/
 .cursor/
 .streamlit/secrets.toml
 .streamlit/secrets.toml.*
 .python-version
+data/*.db

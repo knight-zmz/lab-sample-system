@@ -1,158 +1,151 @@
 # Lab Sample System
 
-实验室样本管理系统课程设计项目。当前版本已经按数据库脚本重构，Python 客户端以 MySQL 中的表、视图、存储过程和业务约束为中心，不再直接绕过数据库设计写入核心业务数据。
+实验室样本管理系统（学习型重构版）。
+
+当前版本基于 **Streamlit + SQLite**，在保留原有业务主线（登记、借用、归还、移位、废弃、项目管理、历史追踪）的基础上，增加了：
+
+- 登录认证
+- 基于角色的权限分级（admin / staff / viewer）
+- 系统审计日志（与业务流水区分）
+- Linux 服务器部署适配（Nginx 反向代理）
 
 ## 技术栈
 
-- MySQL 8.0+
-- Python
+- Python 3.10+
 - Streamlit
-- PyMySQL
+- SQLite
 - Pandas
 
-## 数据库对齐原则
+## 系统数据模型（核心）
 
-- 样本当前状态以 `samples` 为准。
-- 借用单据以 `borrow_records` 为准。
-- 历史流水以 `sample_transactions` 为准。
-- 样本登记、借用、归还、移位、废弃都通过存储过程执行。
-- 样本详情和项目统计等读操作优先复用数据库视图。
+- `samples`：样本当前状态
+- `borrow_records`：借用单据
+- `sample_transactions`：业务流水（CREATE/BORROW/RETURN/MOVE/DISPOSE）
+- `audit_logs`：系统审计日志（登录、权限拒绝、管理操作、异常等）
 
-## 主要页面与数据库对象映射
+注意：`sample_transactions` 是业务事实，`audit_logs` 是系统行为日志，两者不互相替代。
 
-- 样本总览：读取 `v_sample_detail`
-- 样本登记：调用 `sp_register_sample`
-- 样本借用：调用 `sp_borrow_sample`
-- 样本归还：调用 `sp_return_sample`
-- 样本状态处理：调用 `sp_move_sample` 和 `sp_dispose_sample`
-- 记录中心：读取 `v_current_borrowed_samples` 与 `sample_transactions`
-- 项目管理：维护 `projects`，查看 `v_project_sample_statistics`
+## 目录说明（关键）
 
-## 项目运行方式
+- `app_stable.py`：主入口和页面路由
+- `db.py`：统一数据访问层（SQLite）
+- `db_init.py`：SQLite 初始化与种子数据
+- `auth.py` / `permissions.py`：认证与权限
+- `audit.py`：系统审计日志写入
+- `services/`：业务服务层（原存储过程逻辑迁移）
+- `views/`：页面模块
+- `sql/init_sqlite.sql`：SQLite 建表与视图脚本
+- `scripts/init_db.py`：初始化数据库脚本
 
-### 本地运行方式
+## 初始化与运行
 
-安装依赖：
-
-```bash
-pip install -r requirements.txt
-```
-
-配置数据库连接（示例）：
-
-```powershell
-$env:DB_HOST="localhost"
-$env:DB_PORT="3306"
-$env:DB_USER="user"
-$env:DB_PASSWORD="user156"
-$env:DB_NAME="lab_db"
-```
-
-启动应用：
+### 1) 安装依赖
 
 ```bash
-streamlit run app_stable.py
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
 ```
 
-### Railway 部署方式
-
-1. 在 Railway 创建 MySQL 服务。
-2. 在 Railway 创建 Streamlit 服务并连接本仓库。
-3. 在 Streamlit 服务中配置 Variables（见下文）。
-4. 设置 Custom Start Command（见下文）。
-5. 点击 Generate Domain 获取公网访问域名。
-
-## 数据库初始化
-
-在本地或云端 MySQL 中执行以下 SQL 文件：
-
-```sql
-SOURCE sql/lab_sample_db.sql;
-```
-
-必须使用数据库名：`lab_sample_db`。
-
-重点：应用必须连接 `lab_sample_db`，不要连接默认库 `railway`。
-
-## Railway 配置
-
-### Custom Start Command
+### 2) 初始化 SQLite
 
 ```bash
-streamlit run app_stable.py --server.port $PORT --server.address 0.0.0.0
+python scripts/init_db.py
 ```
 
-### Variables
-
-推荐使用独立变量：
-
-```text
-DB_HOST=...
-DB_PORT=...
-DB_USER=...
-DB_PASSWORD=...
-DB_NAME=lab_sample_db
-```
-
-也可使用 URL（2 选 1）：
-
-```text
-MYSQL_URL=mysql://<user>:<password>@<host>:<port>/lab_sample_db
-```
-
-### Generate Domain
-
-部署成功后，在 Railway 服务页面点击 `Generate Domain`，生成可访问地址。
-
-## 常见报错
-
-报错：
-
-```text
-Table 'railway.v_current_borrowed_samples' doesn't exist
-```
-
-原因：
-应用连接到了错误数据库名 `railway`。
-
-解决：
-把 `DB_NAME` 改为 `lab_sample_db`。
-
-如果你使用的是 URL，请把 URL 中数据库名也改成 `lab_sample_db`。
-
-## 最终环境变量说明
-
-在部署环境里明确配置：
-
-```text
-DB_HOST=...
-DB_PORT=...
-DB_USER=...
-DB_PASSWORD=...
-DB_NAME=lab_sample_db
-```
-
-其中 `DB_NAME=lab_sample_db` 是关键项。
-
-## 最终启动命令说明
+可执行冒烟验收（推荐）：
 
 ```bash
-streamlit run app_stable.py --server.port $PORT --server.address 0.0.0.0
+python scripts/smoke_check.py
 ```
 
-这是本次 Railway 部署成功的必要条件。
+默认数据库文件位置：
 
-## 已实现业务能力
+- `data/lab_sample.db`
 
-- 样本列表查看、搜索、筛选与状态概览
-- 样本登记并自动生成样本编号
-- 借用登记与归还闭环处理
-- 样本移位和样本废弃
-- 当前借用记录与历史流水查询
-- 项目列表、统计及增删改查
+可通过环境变量自定义：
 
-## 注意事项
+```bash
+export APP_DB_PATH=/home/admin/lab-sample-system/data/lab_sample.db
+```
 
-- 数据库脚本中的状态值为 `available`、`borrowed`、`disposed`、`returned`、`overdue`，客户端已按此对齐。
-- 如果删除项目失败，通常是该项目仍有关联样本，这是受控行为，不建议直接绕过外键约束。
-- 如果页面操作成功但列表未刷新，可手动刷新页面再次查看数据库最新状态。
+### 3) 默认管理员初始化
+
+初始化脚本会自动创建默认管理员：
+
+- 用户名：`admin`（可通过 `APP_DEFAULT_ADMIN_USER` 覆盖）
+- 密码：`admin123`（可通过 `APP_DEFAULT_ADMIN_PASSWORD` 覆盖）
+
+示例：
+
+```bash
+export APP_DEFAULT_ADMIN_USER=admin
+export APP_DEFAULT_ADMIN_PASSWORD='StrongPass123'
+python scripts/init_db.py
+```
+
+同时会写入演示用户：
+
+- `admin / admin123`
+- `staff / staff123`
+- `viewer / viewer123`
+
+上述默认账号仅用于学习和本地演示，不建议在公开环境长期保留默认密码。
+
+### 4) 启动应用
+
+```bash
+streamlit run app_stable.py --server.address 0.0.0.0 --server.port 8501
+```
+
+若未激活虚拟环境，可直接使用：
+
+```bash
+./.venv/bin/streamlit run app_stable.py --server.address 0.0.0.0 --server.port 8501
+```
+
+## 角色权限
+
+- `admin`：用户管理、项目管理、样本全操作、记录查看、审计日志查看
+- `staff`：样本登记/借用/归还/移位/废弃、样本与记录查看、项目只读
+- `viewer`：只读查看样本、项目、记录
+
+## 安全注意（学习项目也建议遵守）
+
+- 不要把数据库令牌、第三方 API 密钥、私钥等敏感信息写入代码仓库。
+- 默认账号密码仅用于教学，请在首次登录后修改。
+- 服务器部署建议通过环境变量注入配置，避免把真实密码硬编码到脚本与服务文件中。
+- 如果项目后续公开，请再次检查 `README`、`deploy`、日志与历史提交，确认无敏感信息泄露。
+
+## Nginx 反向代理建议
+
+优先建议使用子路径 `/lab-sample/`（便于与现有站点共存）。
+
+参考配置见：
+
+- `deploy/nginx-lab-sample.conf.example`
+
+如果子路径与现有站点冲突，可改用独立子域或根路径。
+
+## systemd 启动建议
+
+参考服务文件：
+
+- `deploy/lab-sample.service.example`
+
+常用命令示例：
+
+```bash
+sudo cp deploy/lab-sample.service.example /etc/systemd/system/lab-sample.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now lab-sample
+sudo systemctl status lab-sample
+```
+
+## 与旧版本差异说明
+
+- 已从 MySQL/PyMySQL 迁移到 SQLite。
+- 原 `sp_*` 存储过程逻辑迁移到 Python 服务层，页面调用接口保持一致语义。
+- Railway 部署方式不再作为主推荐路径。
+- 旧文件 `Railway.session.sql` 仍保留为历史参考，不作为当前运行脚本。

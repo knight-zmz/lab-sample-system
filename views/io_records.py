@@ -1,8 +1,13 @@
 import streamlit as st
 
 from db import query_df
+from permissions import require_permission
+from utils.streamlit_compat import safe_dataframe
 
 def run():
+    if not require_permission("record.view", "当前角色仅允许访问授权记录页面。"):
+        return
+
     st.subheader("出入库记录")
     st.caption("查看当前借用单据和样本历史流水，所有数据直接对齐数据库视图与业务表。")
 
@@ -67,7 +72,7 @@ def run():
             metric_col1, metric_col2 = st.columns(2)
             metric_col1.metric("当前借用单数", len(filtered_borrowed))
             metric_col2.metric("逾期单数", int((filtered_borrowed["status"] == "overdue").sum()))
-            st.dataframe(filtered_borrowed, width="stretch")
+            safe_dataframe(st, filtered_borrowed, width="stretch")
 
     with transaction_tab:
         if transactions_df.empty:
@@ -94,5 +99,5 @@ def run():
             metric_col1, metric_col2 = st.columns(2)
             metric_col1.metric("流水记录数", len(filtered_transactions))
             metric_col2.metric("涉及动作类型", filtered_transactions["action_type"].nunique())
-            st.dataframe(filtered_transactions, width="stretch")
+            safe_dataframe(st, filtered_transactions, width="stretch")
 
