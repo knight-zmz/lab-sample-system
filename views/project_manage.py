@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 import streamlit as st
 
@@ -14,6 +14,20 @@ from utils.submit_guard import run_submit_guard, show_success_pending_if_any
 _KEY_CREATE = "project_create"
 _KEY_UPDATE = "project_update"
 _KEY_DELETE = "project_delete"
+
+
+def _coerce_to_date(value):
+    if value is None:
+        return None
+    if isinstance(value, date):
+        return value
+    text = str(value).strip()
+    if not text or text.lower() in {"none", "nat", "nan"}:
+        return None
+    try:
+        return datetime.strptime(text[:10], "%Y-%m-%d").date()
+    except Exception:
+        return None
 
 
 def run():
@@ -160,6 +174,8 @@ def run():
         }
         selected_label = st.selectbox("选择项目", list(project_options.keys()))
         selected_project = projects_df[projects_df["project_id"] == project_options[selected_label]].iloc[0]
+        selected_start_date = _coerce_to_date(selected_project["start_date"])
+        selected_end_date = _coerce_to_date(selected_project["end_date"])
 
         with st.form("edit_project_form"):
             project_name = st.text_input("项目名称", value=selected_project["project_name"])
@@ -167,18 +183,18 @@ def run():
                 "项目负责人",
                 value=selected_project["principal_investigator"] or ""
             )
-            has_start = bool(selected_project["start_date"])
-            has_end = bool(selected_project["end_date"])
+            has_start = selected_start_date is not None
+            has_end = selected_end_date is not None
             enable_start = st.checkbox("填写开始日期", value=has_start, key="edit_enable_start")
             start_date = st.date_input(
                 "开始日期",
-                value=selected_project["start_date"] if has_start else date.today(),
+                value=selected_start_date if has_start else date.today(),
                 key="edit_start_date"
             ) if enable_start else None
             enable_end = st.checkbox("填写结束日期", value=has_end, key="edit_enable_end")
             end_date = st.date_input(
                 "结束日期",
-                value=selected_project["end_date"] if has_end else date.today(),
+                value=selected_end_date if has_end else date.today(),
                 key="edit_end_date"
             ) if enable_end else None
             description = st.text_area("项目说明", value=selected_project["description"] or "")

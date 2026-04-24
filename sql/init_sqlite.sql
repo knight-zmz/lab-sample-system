@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     target_id TEXT,
     status TEXT NOT NULL CHECK (status IN ('success', 'failure', 'denied', 'error')),
     detail TEXT,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_samples_status ON samples(status);

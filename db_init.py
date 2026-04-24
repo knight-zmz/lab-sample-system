@@ -29,10 +29,64 @@ def init_sqlite_db():
     with sqlite3.connect(str(db_path)) as conn:
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(schema_sql)
+        _migrate_audit_logs_created_at_default(conn)
         if is_auto_seed_enabled():
             seed_basic_data(conn)
         conn.commit()
     return db_path
+
+
+def _migrate_audit_logs_created_at_default(conn):
+    """
+    历史数据库可能将 audit_logs.created_at 默认值建成了 CURRENT_TIMESTAMP（UTC）。
+    这里做一次无损迁移，统一为本地时区默认值。
+    """
+    row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='audit_logs'"
+    ).fetchone()
+    if not row or not row[0]:
+        return
+    ddl = str(row[0]).lower()
+    if "datetime('now', 'localtime')" in ddl:
+        return
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("ALTER TABLE audit_logs RENAME TO audit_logs_old")
+        conn.execute(
+            """
+            CREATE TABLE audit_logs (
+                audit_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_type TEXT NOT NULL,
+                actor_user_id INTEGER,
+                actor_username TEXT,
+                action TEXT NOT NULL,
+                target_type TEXT,
+                target_id TEXT,
+                status TEXT NOT NULL CHECK (status IN ('success', 'failure', 'denied', 'error')),
+                detail TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime'))
+            )
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO audit_logs (
+                audit_id, event_type, actor_user_id, actor_username, action,
+                target_type, target_id, status, detail, created_at
+            )
+            SELECT
+                audit_id, event_type, actor_user_id, actor_username, action,
+                target_type, target_id, status, detail, created_at
+            FROM audit_logs_old
+            """
+        )
+        conn.execute("DROP TABLE audit_logs_old")
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_audit_event_created ON audit_logs(event_type, created_at)"
+        )
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
 
 
 def seed_basic_data(conn):
